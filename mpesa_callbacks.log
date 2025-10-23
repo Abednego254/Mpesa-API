@@ -1,0 +1,7 @@
+2025-09-27 23:34:19,216 - ERROR - Error saving callback: (pymysql.err.IntegrityError) (1452, 'Cannot add or update a child row: a foreign key constraint fails (`myapp_db`.`mpesa_callbacks`, CONSTRAINT `mpesa_callbacks_ibfk_1` FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`))')
+[SQL: INSERT INTO mpesa_callbacks (invoice_id, merchant_request_id, checkout_request_id, result_code, result_desc, amount, mpesa_receipt_number, phone_number, transaction_date, created_at) VALUES (%(invoice_id)s, %(merchant_request_id)s, %(checkout_request_id)s, %(result_code)s, %(result_desc)s, %(amount)s, %(mpesa_receipt_number)s, %(phone_number)s, %(transaction_date)s, %(created_at)s)]
+[parameters: {'invoice_id': '1', 'merchant_request_id': '12345', 'checkout_request_id': 'abc123', 'result_code': 0, 'result_desc': 'Success', 'amount': 1500, 'mpesa_receipt_number': 'MPESA123XYZ', 'phone_number': '254700123456', 'transaction_date': datetime.datetime(2025, 9, 28, 9, 45, 30), 'created_at': datetime.datetime(2025, 9, 27, 23, 34, 19, 164975)}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+2025-09-27 23:40:11,536 - INFO - Callback saved successfully for CheckoutRequestID=abc123
+2025-09-27 23:42:24,994 - INFO - Duplicate callback ignored for CheckoutRequestID=abc123
+2025-09-27 23:43:26,393 - INFO - Callback saved successfully for CheckoutRequestID=abc124
