@@ -3,6 +3,9 @@ from backend.extensions import db
 from backend.models import User
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from backend.routes.auth_middleware import token_required
+from backend.utils.email import send_email
+
 user_bp = Blueprint("user_bp", __name__, url_prefix="/users")
 
 VALID_ROLES = ["admin", "seller"]
@@ -103,3 +106,23 @@ def delete_user(user_id):
     db.session.delete(user)
     db.session.commit()
     return jsonify({"message": "User deleted"}), 200
+
+@user_bp.route("/<int:user_id>/approve", methods=["PUT"])
+@token_required(roles=["admin"])
+def approve_user(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.is_approved:
+        return jsonify({"message": "User already approved"}), 400
+
+    user.is_approved = True
+    db.session.commit()
+
+    # Send email notifying user of approval
+    send_email(
+        to=user.email,
+        subject="Account Approved",
+        body=f"Hi {user.username}, your account has been approved! You can now log in."
+    )
+
+    return jsonify({"message": f"User {user.username} has been approved"}), 200
+

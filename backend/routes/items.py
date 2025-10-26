@@ -9,7 +9,7 @@ bp = Blueprint("items", __name__)
 
 # GET all items
 @bp.route("/", methods=["GET"])
-@token_required()
+@token_required(roles=["admin", "seller"])
 def get_items():
     items = Item.query.all()
     return jsonify([{
@@ -23,7 +23,7 @@ def get_items():
 
 # GET single item by id
 @bp.route("/<int:item_id>", methods=["GET"])
-@token_required()
+@token_required(roles=["admin", "seller"])
 def get_item(item_id):
     item = Item.query.get_or_404(item_id)
     return jsonify({
@@ -37,7 +37,7 @@ def get_item(item_id):
 
 # CREATE new item
 @bp.route("/", methods=["POST"])
-@token_required()
+@token_required(roles=["admin", "seller"])
 def create_item():
     data = request.get_json()
     item = Item(
@@ -52,7 +52,7 @@ def create_item():
 
 # UPDATE item
 @bp.route("/<int:item_id>", methods=["PUT"])
-@token_required()
+@token_required(roles=["admin", "seller"])
 def update_item(item_id):
     item = Item.query.get_or_404(item_id)
     data = request.get_json()
@@ -65,7 +65,7 @@ def update_item(item_id):
 
 # DELETE item
 @bp.route("/<int:item_id>", methods=["DELETE"])
-@token_required()
+@token_required(roles=["admin", "seller"])
 def delete_item(item_id):
     item = Item.query.get_or_404(item_id)
     # Optional: delete related InvoiceItems first

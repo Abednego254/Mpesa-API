@@ -7,7 +7,7 @@ from backend.models import User, Invoice, Commission
 commission_bp = Blueprint("commission_bp", __name__)
 
 @commission_bp.route("/calculate", methods=["GET"])
-@token_required(role="admin")
+@token_required()
 def calculate_commissions():
     """
     Calculate total sales and 30% commissions for all users with role 'seller' or 'admin'.
@@ -33,19 +33,18 @@ def calculate_commissions():
                 continue
 
             # Calculate commission (30%)
+            # Calculate commission (30%)
             commission_rate = 0.30
-            commission_amount = round((float(invoice.total or 0.0) * commission_rate), 2)
 
             # Create and add commission record
             commission_record = Commission(
                 seller_id=seller.id,
                 invoice_id=invoice.id,
                 amount=float(invoice.total or 0.0),
-                rate=commission_rate,
-                commission_amount=commission_amount,
+                rate=commission_rate
             )
             db.session.add(commission_record)
-            new_commissions_total += commission_amount
+            new_commissions_total += round((float(invoice.total or 0.0) * commission_rate), 2)
 
         # Commit new commission records for this seller (if any)
         try:

@@ -10,6 +10,7 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     role = db.Column(db.String(20), nullable=False, default="seller")
     password_hash = db.Column(db.String(256), nullable=False)
+    is_approved = db.Column(db.Boolean, nullable=False, default=False)
 
     # Relationship — one seller can have many invoices
     invoices = db.relationship("Invoice", backref="seller", lazy=True)
@@ -95,6 +96,7 @@ class Commission(db.Model):
     amount = db.Column(db.Float, nullable=False)
     rate = db.Column(db.Float, nullable=False, default=0.30)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
     seller = db.relationship("User", backref="commissions", lazy=True)
     invoice = db.relationship("Invoice", backref="commission", lazy=True)

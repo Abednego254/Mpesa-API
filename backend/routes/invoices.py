@@ -38,44 +38,105 @@ def get_invoice(invoice_id):
         ]
     })
 
-# CREATE invoice with items
+# CREATE invoice with items (total calculated from DB)
 @bp.route("/", methods=["POST"])
 def create_invoice():
     data = request.get_json()
+    items_data = data.get("items", [])
+
+    if not items_data:
+        return jsonify({"error": "Invoice must have at least one item"}), 400
+
+    total = 0
+    invoice_items = []
+
+    # Prepare InvoiceItems and calculate total
+    for item in items_data:
+        db_item = Item.query.get(item["item_id"])
+        if not db_item:
+            return jsonify({"error": f"Item with id {item['item_id']} not found"}), 404
+
+        quantity = item.get("quantity", 1)
+        price = db_item.price
+        total += price * quantity
+
+        invoice_items.append(
+            InvoiceItem(
+                item_id=db_item.id,
+                quantity=quantity,
+                price=price
+            )
+        )
+
+    if total == 0:
+        return jsonify({"error": "Total cannot be zero"}), 400
+
+    # Create Invoice
     invoice = Invoice(
         user_id=data.get("user_id"),
-        total=data.get("total"),
+        total=total,  # <- now guaranteed to have a value
         status=data.get("status", "pending")
     )
     db.session.add(invoice)
-    db.session.flush()  # get invoice.id before commit
+    db.session.flush()  # get invoice.id
 
-    items_data = data.get("items", [])
-    for item in items_data:
-        inv_item = InvoiceItem(
-            invoice_id=invoice.id,
-            item_id=item["item_id"],
-            quantity=item.get("quantity", 1),
-            price=item["price"]
-        )
+    # Assign invoice_id to invoice items and add
+    for inv_item in invoice_items:
+        inv_item.invoice_id = invoice.id
         db.session.add(inv_item)
 
     db.session.commit()
-    return jsonify({"message": "Invoice created", "id": invoice.id}), 201
+    return jsonify({"message": "Invoice created", "id": invoice.id, "total": total}), 201
 
-# UPDATE invoice
+
+# UPDATE invoice (can update items or status)
 @bp.route("/<int:invoice_id>", methods=["PUT"])
 def update_invoice(invoice_id):
     inv = Invoice.query.get_or_404(invoice_id)
     data = request.get_json()
 
+    # Update status if provided
     inv.status = data.get("status", inv.status)
-    inv.total = data.get("total", inv.total)
+
+    # Update items if provided
+    items_data = data.get("items")
+    if items_data:
+        # Delete old invoice items
+        InvoiceItem.query.filter_by(invoice_id=inv.id).delete()
+        total = 0
+        new_items = []
+
+        for item in items_data:
+            db_item = Item.query.get(item["item_id"])
+            if not db_item:
+                return jsonify({"error": f"Item with id {item['item_id']} not found"}), 404
+
+            quantity = item.get("quantity", 1)
+            price = db_item.price
+            total += price * quantity
+
+            new_items.append(
+                InvoiceItem(
+                    invoice_id=inv.id,
+                    item_id=db_item.id,
+                    quantity=quantity,
+                    price=price
+                )
+            )
+
+        # Add new items
+        for inv_item in new_items:
+            db.session.add(inv_item)
+
+        # Update total
+        inv.total = total
+
+    # Optional: update checkout_request_id
     if "checkout_request_id" in data:
         inv.checkout_request_id = data["checkout_request_id"]
 
     db.session.commit()
-    return jsonify({"message": "Invoice updated"})
+    return jsonify({"message": "Invoice updated", "total": inv.total})
 
 # DELETE invoice
 @bp.route("/<int:invoice_id>", methods=["DELETE"])

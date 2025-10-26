@@ -6,7 +6,7 @@ from backend.models import User, Invoice
 admin_bp = Blueprint("admin_bp", __name__)
 
 @admin_bp.route("/calculate_commission", methods=["GET"])
-@token_required(role="admin")
+@token_required()
 def calculate_commission():
     """Calculate total sales and 30% commission for each seller"""
     sellers = User.query.filter_by(role="seller").all()

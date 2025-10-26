@@ -53,10 +53,8 @@ def mpesa_callbacks():
             print(f"⚠️ Invoice not found for CheckoutRequestID: {checkout_request_id}")
             return jsonify({"error": "Invoice not found"}), 404
 
-        # Check if callback already exists (idempotency)
-        existing = MpesaCallback.query.filter_by(
-            checkout_request_id=checkout_request_id
-        ).first()
+        # Idempotency: check if callback already exists
+        existing = MpesaCallback.query.filter_by(checkout_request_id=checkout_request_id).first()
         if existing:
             print("ℹ️ Duplicate callback ignored.")
             return jsonify({"status": "duplicate"}), 200
@@ -77,12 +75,15 @@ def mpesa_callbacks():
         )
         db.session.add(callback)
 
-        # Update invoice status
+        # Update invoice status immediately
         if result_code == 0:
             invoice.status = "paid"
             invoice.mpesa_receipt = mpesa_receipt
             invoice.phone_number = phone_number
-            invoice.transaction_date = transaction_date
+            invoice.transaction_date = datetime.strptime(transaction_date, "%Y%m%d%H%M%S") \
+                if transaction_date else None
+        elif result_code in [1032, 1031]:  # optional: cancelled codes
+            invoice.status = "cancelled"
         else:
             invoice.status = "failed"
 

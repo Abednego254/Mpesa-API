@@ -3,10 +3,12 @@ import requests
 from datetime import datetime
 import base64
 import os
+from backend.models import Invoice
+from backend.extensions import db
 
 mpesa_stk_bp = Blueprint("mpesa_stk_bp", __name__)
 
-# M-Pesa credentials from environment variables
+# M-Pesa sandbox credentials
 BUSINESS_SHORTCODE = os.getenv("MPESA_SHORTCODE")
 PASSKEY = os.getenv("MPESA_PASSKEY")
 CONSUMER_KEY = os.getenv("MPESA_CONSUMER_KEY")
@@ -21,28 +23,30 @@ def get_access_token():
     response.raise_for_status()
     return response.json().get("access_token")
 
+
 @mpesa_stk_bp.route("/stkpush", methods=["POST"])
 def stk_push():
     """Initiate STK Push"""
     data = request.get_json()
-    phone = data.get("phone_number")
-    amount = data.get("amount")
     invoice_id = data.get("invoice_id")
+    phone = str(data.get("phone_number")).replace("+", "").replace(" ", "")
 
-    if not phone or not amount:
-        return jsonify({"error": "Phone number and amount are required"}), 400
+    if not invoice_id or not phone:
+        return jsonify({"error": "Invoice ID and phone number are required"}), 400
+
+    # Fetch invoice from DB
+    invoice = Invoice.query.get(invoice_id)
+    if not invoice:
+        return jsonify({"error": "Invoice not found"}), 404
+
+    # Use invoice total as amount
+    amount = int(invoice.total)
 
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     password = base64.b64encode((BUSINESS_SHORTCODE + PASSKEY + timestamp).encode()).decode()
 
-    try:
-        access_token = get_access_token()
-        print("ACCESS TOKEN:", access_token)
-    except Exception as e:
-        return jsonify({"error": f"Failed to get access token: {str(e)}"}), 500
-
     headers = {
-        "Authorization": f"Bearer {access_token}",
+        "Authorization": f"Bearer {get_access_token()}",
         "Content-Type": "application/json"
     }
 
@@ -56,9 +60,12 @@ def stk_push():
         "PartyB": BUSINESS_SHORTCODE,
         "PhoneNumber": phone,
         "CallBackURL": CALLBACK_URL,
-        "AccountReference": f"INV{invoice_id or 0}",
+        "AccountReference": f"INV{invoice_id}",
         "TransactionDesc": "Payment for invoice"
     }
+
+    # Debug print to verify payload
+    print("📤 STK Push Payload:", payload)
 
     try:
         res = requests.post(
@@ -68,6 +75,14 @@ def stk_push():
             timeout=10
         )
         res.raise_for_status()
-        return jsonify(res.json()), res.status_code
+        response_data = res.json()
+
+        # Save CheckoutRequestID to invoice for callback tracking
+        invoice.checkout_request_id = response_data.get("CheckoutRequestID")
+        db.session.commit()
+
+        print("✅ STK Push sent, invoice updated with CheckoutRequestID")
+        return jsonify(response_data), res.status_code
+
     except requests.RequestException as e:
         return jsonify({"error": str(e)}), 500
