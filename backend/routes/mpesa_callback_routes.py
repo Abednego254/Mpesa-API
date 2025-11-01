@@ -1,97 +1,76 @@
 from flask import Blueprint, request, jsonify
-from backend.extensions import db
-from backend.models import Invoice, MpesaCallback
+from backend.extensions import db, socketio
+from backend.models import Invoice
 from datetime import datetime
 
 mpesa_callback_bp = Blueprint("mpesa_callback_bp", __name__)
 
 @mpesa_callback_bp.route("/mpesa/callbacks", methods=["POST"])
-def mpesa_callbacks():
-    """Receive M-Pesa STK Push callback and update invoice accordingly"""
+def mpesa_callback():
     data = request.get_json()
-    print("📩 M-Pesa Callback Received:", data)
+    print("📥 M-Pesa Callback received:", data)
 
-    try:
-        # Handle both possible Safaricom formats
-        stk_callback = (
-            data.get("Body", {}).get("stkCallback")
-            if "Body" in data
-            else data.get("stkCallback", {})
-        )
+    body = data.get("Body", {})
+    stk_callback = body.get("stkCallback", {})
 
-        if not stk_callback:
-            print("⚠️ No stkCallback found in payload")
-            return jsonify({"error": "Invalid callback structure"}), 400
+    checkout_request_id = stk_callback.get("CheckoutRequestID")
+    result_code = stk_callback.get("ResultCode")
+    result_desc = stk_callback.get("ResultDesc")
 
-        checkout_request_id = stk_callback.get("CheckoutRequestID")
-        merchant_request_id = stk_callback.get("MerchantRequestID")
-        result_code = stk_callback.get("ResultCode")
-        result_desc = stk_callback.get("ResultDesc")
-        callback_metadata = stk_callback.get("CallbackMetadata", {})
+    invoice = Invoice.query.filter_by(checkout_request_id=checkout_request_id).first()
 
-        # Extract metadata
-        amount = None
+    if not invoice:
+        print("⚠️ No matching invoice found for callback.")
+        return jsonify({"ResultCode": 0, "ResultDesc": "No matching invoice"}), 200
+
+    if result_code == 0:
+        metadata = stk_callback.get("CallbackMetadata", {}).get("Item", [])
         mpesa_receipt = None
         phone_number = None
         transaction_date = None
 
-        for item in callback_metadata.get("Item", []):
+        for item in metadata:
             name = item.get("Name")
-            value = item.get("Value")
-            if name == "Amount":
-                amount = value
-            elif name == "MpesaReceiptNumber":
-                mpesa_receipt = value
+            if name == "MpesaReceiptNumber":
+                mpesa_receipt = item.get("Value")
             elif name == "PhoneNumber":
-                phone_number = str(value)
+                phone_number = str(item.get("Value"))
             elif name == "TransactionDate":
-                transaction_date = str(value)
+                raw_date = str(item.get("Value"))
+                transaction_date = datetime.strptime(raw_date, "%Y%m%d%H%M%S")
 
-        # Lookup invoice by CheckoutRequestID
-        invoice = Invoice.query.filter_by(checkout_request_id=checkout_request_id).first()
-        if not invoice:
-            print(f"⚠️ Invoice not found for CheckoutRequestID: {checkout_request_id}")
-            return jsonify({"error": "Invoice not found"}), 404
+        invoice.status = "paid"
+        invoice.mpesa_receipt = mpesa_receipt
+        invoice.phone_number = phone_number
+        invoice.transaction_date = transaction_date
+        db.session.commit()
 
-        # Idempotency: check if callback already exists
-        existing = MpesaCallback.query.filter_by(checkout_request_id=checkout_request_id).first()
-        if existing:
-            print("ℹ️ Duplicate callback ignored.")
-            return jsonify({"status": "duplicate"}), 200
+        socketio.emit("payment_update", {
+            "invoice_id": invoice.id,
+            "status": "paid",
+            "message": f"Invoice {invoice.id} has been paid successfully."
+        })
 
-        # Save callback details
-        callback = MpesaCallback(
-            invoice_id=invoice.id,
-            merchant_request_id=merchant_request_id,
-            checkout_request_id=checkout_request_id,
-            result_code=result_code,
-            result_desc=result_desc,
-            amount=amount,
-            mpesa_receipt_number=mpesa_receipt,
-            phone_number=phone_number,
-            transaction_date=datetime.strptime(transaction_date, "%Y%m%d%H%M%S")
-            if transaction_date
-            else None,
-        )
-        db.session.add(callback)
+        print(f"✅ Invoice {invoice.id} marked as PAID")
 
-        # Update invoice status immediately
-        if result_code == 0:
-            invoice.status = "paid"
-            invoice.mpesa_receipt = mpesa_receipt
-            invoice.phone_number = phone_number
-            invoice.transaction_date = datetime.strptime(transaction_date, "%Y%m%d%H%M%S") \
-                if transaction_date else None
-        elif result_code in [1032, 1031]:  # optional: cancelled codes
+    else:
+        if "cancelled" in result_desc.lower():
             invoice.status = "cancelled"
+            message = "Client cancelled the payment."
+        elif "insufficient" in result_desc.lower():
+            invoice.status = "failed_insufficient_funds"
+            message = "Client has insufficient funds."
         else:
             invoice.status = "failed"
+            message = "Payment failed."
 
         db.session.commit()
-        print(f"✅ Invoice {invoice.id} updated -> {invoice.status.upper()}")
-        return jsonify({"status": "success"}), 200
+        socketio.emit("payment_update", {
+            "invoice_id": invoice.id,
+            "status": invoice.status,
+            "message": message
+        })
 
-    except Exception as e:
-        db.session.rollback()
-        print("❌ Error processing callback:", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print(f"❌ Payment failed for invoice {invoice.id}: {result_desc}")
+
+    return jsonify({"ResultCode": 0, "ResultDesc": "Callback received successfully"})

@@ -39,6 +39,7 @@ def get_invoice(invoice_id):
     })
 
 # CREATE invoice with items (total calculated from DB)
+# CREATE invoice with items (total calculated from DB)
 @bp.route("/", methods=["POST"])
 def create_invoice():
     data = request.get_json()
@@ -71,12 +72,17 @@ def create_invoice():
     if total == 0:
         return jsonify({"error": "Total cannot be zero"}), 400
 
-    # Create Invoice
+    # Create Invoice with optional fields
     invoice = Invoice(
         user_id=data.get("user_id"),
-        total=total,  # <- now guaranteed to have a value
-        status=data.get("status", "pending")
+        total=total,
+        status=data.get("status", "pending"),
+        checkout_request_id=data.get("checkout_request_id"),
+        mpesa_receipt=data.get("mpesa_receipt"),
+        phone_number=data.get("phone_number"),
+        transaction_date=data.get("transaction_date")
     )
+
     db.session.add(invoice)
     db.session.flush()  # get invoice.id
 
@@ -86,7 +92,12 @@ def create_invoice():
         db.session.add(inv_item)
 
     db.session.commit()
-    return jsonify({"message": "Invoice created", "id": invoice.id, "total": total}), 201
+
+    return jsonify({
+        "message": "Invoice created successfully",
+        "id": invoice.id,
+        "total": total
+    }), 201
 
 
 # UPDATE invoice (can update items or status)
