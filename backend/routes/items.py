@@ -10,16 +10,21 @@ bp = Blueprint("items", __name__)
 @token_required(roles=["admin", "seller"])
 def get_items():
     items = Item.query.all()
-    return jsonify([{
-        "id": i.id,
-        "name": i.name,
-        "description": i.description,
-        "price": i.price,
-        "stock": i.stock,
-        "created_at": i.created_at,
-        "photo": i.photo  # ✅ include photo path
-    } for i in items])
+    base_url = request.host_url.rstrip("/")  # e.g. http://127.0.0.1:5000
 
+    return jsonify([
+        {
+            "id": i.id,
+            "name": i.name,
+            "description": i.description,
+            "price": i.price,
+            "stock": i.stock,
+            "created_at": i.created_at,
+            "photo": (
+                f"{base_url}{i.photo}" if i.photo else None
+            )
+        } for i in items
+    ])
 
 # GET single item by id
 @bp.route("/<int:item_id>", methods=["GET"])
