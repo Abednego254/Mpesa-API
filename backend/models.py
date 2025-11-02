@@ -27,12 +27,14 @@ class Item(db.Model):
     description = db.Column(db.Text)
     price = db.Column(db.Float, nullable=False)
     stock = db.Column(db.Integer, default=0)
+    photo = db.Column(db.String(255))  # <-- new column
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     invoice_items = db.relationship("InvoiceItem", backref="item", lazy=True)
 
     def __repr__(self):
         return f"<Item {self.name} - {self.price}>"
+
 
 
 class Invoice(db.Model):

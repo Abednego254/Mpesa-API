@@ -12,6 +12,7 @@ from .routes.admin_routes import admin_bp
 from .routes.commissions import commission_bp
 from .routes.auth_routes import auth_bp
 from . import models
+from .routes.photo_routes import photo_bp
 
 # Load environment variables
 load_dotenv()
@@ -20,7 +21,7 @@ jwt = JWTManager()
 
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder="static")
     CORS(app, supports_credentials=True)
 
     # -----------------------------
@@ -66,6 +67,7 @@ def create_app():
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(commission_bp, url_prefix="/api/commissions")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    app.register_blueprint(photo_bp, url_prefix="/api/photo")
 
     # -----------------------------
     # Simple Health Check Route

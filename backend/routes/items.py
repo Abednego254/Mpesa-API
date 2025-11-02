@@ -1,5 +1,3 @@
-# backend/routes/items.py
-
 from backend.routes.auth_middleware import token_required
 from flask import Blueprint, request, jsonify
 from ..extensions import db
@@ -18,8 +16,10 @@ def get_items():
         "description": i.description,
         "price": i.price,
         "stock": i.stock,
-        "created_at": i.created_at
+        "created_at": i.created_at,
+        "photo": i.photo  # ✅ include photo path
     } for i in items])
+
 
 # GET single item by id
 @bp.route("/<int:item_id>", methods=["GET"])
@@ -35,7 +35,6 @@ def get_item(item_id):
         "created_at": item.created_at
     })
 
-# CREATE new item
 @bp.route("/", methods=["POST"])
 @token_required(roles=["admin", "seller"])
 def create_item():
@@ -44,11 +43,13 @@ def create_item():
         name=data.get("name"),
         description=data.get("description"),
         price=data.get("price"),
-        stock=data.get("stock", 0)
+        stock=data.get("stock", 0),
+        photo=data.get("photo")  # <-- store the uploaded photo path
     )
     db.session.add(item)
     db.session.commit()
     return jsonify({"message": "Item created", "id": item.id}), 201
+
 
 # UPDATE item
 @bp.route("/<int:item_id>", methods=["PUT"])
